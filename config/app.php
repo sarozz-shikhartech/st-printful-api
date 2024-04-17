@@ -2,6 +2,8 @@
 
 return [
 
+    'printful.access_token' => env('PRINTFULL_TOKEN', 'default'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Name
