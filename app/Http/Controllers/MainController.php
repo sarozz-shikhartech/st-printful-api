@@ -51,6 +51,4 @@ class MainController extends Controller
 
         return $this->output('Order created.', $data['result']);
     }
-
-
 }
