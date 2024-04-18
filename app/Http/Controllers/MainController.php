@@ -14,6 +14,9 @@ class MainController extends Controller
      */
     public function getPrintFulProductById(Request $request, int $productId): JsonResponse
     {
+        /*
+         * https://developers.printful.com/docs/#tag/Catalog-API/operation/getProductById
+         */
         $res = $this->clientRequest('get','https://api.printful.com/products/' . $productId);
 
         if ($res instanceof \Exception) {
@@ -32,6 +35,9 @@ class MainController extends Controller
     {
         $data = json_decode($request->getContent(), true);
 
+        /*
+         * https://developers.printful.com/docs/#tag/Orders-API/operation/createOrder
+         */
         $res = $this->clientRequest('post','https://api.printful.com/orders', [
             'headers' => [
                 'Authorization' => 'Bearer '. $this->config('printful.access_token'),
