@@ -3,6 +3,7 @@
 return [
 
     'printful.access_token' => env('PRINTFULL_TOKEN', 'default'),
+    'app_url' => env('APP_URL', 'http://localhost:8000'),
 
     /*
     |--------------------------------------------------------------------------

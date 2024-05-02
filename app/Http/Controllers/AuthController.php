@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
@@ -19,26 +21,78 @@ class AuthController extends Controller
 
         // validate the request
         $validator = Validator::make($request->all(), [
-            'name'     => 'required|string',
-            'email'    => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:6',
+            'storeId' => 'required',
+            'storeUrl' => 'required',
+            'name' => 'required',
+            'email' => 'required|email',
+            'password' => 'required'
         ]);
         if ($validator->fails()) return $this->output($validator->errors(), [], 422);
 
-        $name = $data->name;
+        $storeName = $data->name;
         $email = $data->email;
         $password = $data->password;
+        $storeId = $data->storeId;
+        $storeUrl = $data->storeUrl;
 
         try {
+            DB::beginTransaction();
             $newUser = User::create([
-                'name'       => $name,
+                'name'       => $storeName,
                 'email'      => $email,
                 'password'   => Hash::make($password),
-                'status'     => '1'
+                'status'     => '1',
+                'store_id'   => $storeId,
+                'store_url'  => $storeUrl
             ]);
 
-            return $this->output('User created successfully.', $newUser);
+            $token = Auth::claims(['user_id' => $newUser->id, 'email' => $newUser->email, 'store_id' => $newUser->store_id, 'store_url' => $newUser->store_url])
+                ->login($newUser);
+            if (!$token) return $this->output('Something went wrong', [], 500);
+
+
+            try {
+                //setting up webhook for the user
+                $setupWebhook = $this->clientRequest('POST','https://api.printful.com/v2/webhooks',
+                    [
+                        'headers' => [
+                            'X-PF-Store-Id' => $storeId,
+                            'Authorization' => 'Bearer '. $this->config('printful.access_token')
+                        ],
+                        'json' => [
+                            'default_url' => $this->config('app_url') . '/api/pf/webhook',
+                            'events' => [
+                                [
+                                    'type' => 'shipment_sent',
+                                    'url' => $this->config('app_url') . '/api/pf/webhook'
+                                ],
+                                [
+                                    'type' => 'order_created',
+                                    'url' => $this->config('app_url') . '/api/pf/webhook'
+                                ],
+                                [
+                                    'type' => 'order_canceled',
+                                    'url' => $this->config('app_url') . '/api/pf/webhook'
+                                ]
+                            ]
+                        ]
+                    ]);
+
+
+            } catch (GuzzleException $exception) {
+                DB::rollBack();
+                return $this->output('Registration failed.', $exception->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
+            }
+
+            $data = [
+                "store_name" => $newUser->name,
+                "token" => $token,
+            ];
+
+            DB::commit();
+            return $this->output('User created successfully.', $data);
         } catch (\Exception $exception) {
+            DB::rollBack();
             return $this->output('Registration failed.', $exception->getMessage(), Response::HTTP_INTERNAL_SERVER_ERROR);
         }
     }
